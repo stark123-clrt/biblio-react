@@ -4,8 +4,6 @@ import { useBooks } from '../../contexts/BookContext';
 import { Book, ReadingProgress } from '../../types';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
-  ArrowRight,
   Bookmark,
   X,
   List,
@@ -56,6 +54,7 @@ const PDFReader = ({ book }: PDFReaderProps) => {
   const [scale, setScale] = useState<number>(1.5);
   const [headerCollapsed, setHeaderCollapsed] = useState<boolean>(false);
   const [lastSavedPage, setLastSavedPage] = useState<number>(1);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Fonction pour fermer le lecteur et revenir au profil
   const closeReader = () => {
@@ -238,6 +237,72 @@ const PDFReader = ({ book }: PDFReaderProps) => {
     }
   };
 
+  // Navigation par clavier
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        goToNextPage();
+      } else if (e.key === 'ArrowLeft') {
+        goToPrevPage();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentPage, totalPages]);
+
+  // Ajout de navigation par clic sur les côtés de la page
+  const handleTapNavigation = (e: React.MouseEvent<HTMLDivElement>) => {
+    const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
+    const clickX = e.clientX;
+    
+    // Si on clique dans le tiers gauche de l'écran, on va à la page précédente
+    if (clickX < containerWidth / 3) {
+      goToPrevPage();
+    }
+    // Si on clique dans le tiers droit de l'écran, on va à la page suivante
+    else if (clickX > (containerWidth * 2) / 3) {
+      goToNextPage();
+    }
+  };
+
+  // Support pour les gestures tactiles (swipe)
+  useEffect(() => {
+    let touchStartX = 0;
+    
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX = e.touches[0].clientX;
+    };
+    
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touchEndX = e.changedTouches[0].clientX;
+      const diffX = touchEndX - touchStartX;
+      
+      // Swipe de droite à gauche -> page suivante
+      if (diffX < -75 && currentPage < totalPages) {
+        goToNextPage();
+      }
+      // Swipe de gauche à droite -> page précédente
+      else if (diffX > 75 && currentPage > 1) {
+        goToPrevPage();
+      }
+    };
+    
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('touchstart', handleTouchStart);
+      container.addEventListener('touchend', handleTouchEnd);
+      
+      return () => {
+        container.removeEventListener('touchstart', handleTouchStart);
+        container.removeEventListener('touchend', handleTouchEnd);
+      };
+    }
+  }, [currentPage, totalPages]);
+
   const toggleNotes = () => {
     setSidebarMode(sidebarMode === 'notes' ? null : 'notes');
     setShowAddNote(false);
@@ -310,6 +375,11 @@ const PDFReader = ({ book }: PDFReaderProps) => {
             </div>
           </div>
           
+          {/* Indicateur de page au centre */}
+          <div className="text-sm text-gray-600 mx-2">
+            Page {currentPage} sur {totalPages}
+          </div>
+          
           {/* Contrôles centraux */}
           {!headerCollapsed && (
             <div className="flex items-center gap-3 flex-wrap justify-center">
@@ -380,8 +450,12 @@ const PDFReader = ({ book }: PDFReaderProps) => {
         </div>
       </div>
 
-      {/* PDF Reader */}
-      <div className="flex flex-1 relative">
+      {/* PDF Reader - avec gestion des clics pour navigation */}
+      <div 
+        className="flex flex-1 relative"
+        ref={containerRef}
+        onClick={handleTapNavigation}
+      >
         <div className="flex-1 bg-gray-800 flex flex-col items-center justify-center">
           {loading ? (
             <div className="flex flex-col items-center justify-center text-white">
@@ -389,37 +463,13 @@ const PDFReader = ({ book }: PDFReaderProps) => {
               <p>Chargement du PDF...</p>
             </div>
           ) : (
-            <>
-              <div className="overflow-auto flex justify-center items-center h-full w-full">
-                <canvas
-                  ref={canvasRef}
-                  className="shadow-lg"
-                  style={{ backgroundColor: 'white' }}
-                />
-              </div>
-
-              <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex items-center bg-white rounded-lg shadow-lg px-4 py-2 z-10">
-                <button
-                  onClick={goToPrevPage}
-                  disabled={currentPage <= 1}
-                  className={`px-4 py-2 mr-4 border rounded-md ${currentPage <= 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'}`}
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-
-                <div className="text-gray-700">
-                  Page {currentPage} sur {totalPages}
-                </div>
-
-                <button
-                  onClick={goToNextPage}
-                  disabled={currentPage >= totalPages}
-                  className={`px-4 py-2 ml-4 border rounded-md ${currentPage >= totalPages ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'}`}
-                >
-                  <ArrowRight className="h-5 w-5" />
-                </button>
-              </div>
-            </>
+            <div className="overflow-auto flex justify-center items-center h-full w-full">
+              <canvas
+                ref={canvasRef}
+                className="shadow-lg"
+                style={{ backgroundColor: 'white' }}
+              />
+            </div>
           )}
         </div>
 
